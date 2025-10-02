@@ -15,29 +15,35 @@ describe('Bank app - Hermione Granger flow (stable)', () => {
       });
   }
 
-  // ✅ Helper: enter an amount safely (lint-clean, no unsafe chaining)
+  // ✅ Helper: safely enter an amount
   function enterAmount(value) {
-    // Ensure input exists and is visible
     cy.get('input[ng-model="amount"]', { timeout: 10000 })
       .should('exist')
       .and('be.visible')
       .scrollIntoView();
 
-    // Clear in its own command
     cy.get('input[ng-model="amount"]').clear();
-
-    // Type in its own command
     cy.get('input[ng-model="amount"]').type(value.toString());
   }
 
   it('should allow working with Hermione bank account', () => {
     // ---- Customer Login ----
     cy.contains('Customer Login').click();
-    cy.get('#userSelect', { timeout: 10000 }).select(1);
+
+    // Select Hermione by visible text
+    cy.get('#userSelect', { timeout: 10000 }).select('Hermione Granger');
     cy.contains('Login').click();
 
+    // Verify account details
     cy.get('.center strong:nth-child(1)').should('contain.text', '1001');
     cy.get('.center strong:nth-child(3)').should('contain.text', 'Dollar');
+
+    // ✅ Explicit balance check (numeric presence)
+    cy.get('.center strong:nth-child(2)')
+      .invoke('text')
+      .should((text) => {
+        expect(Number(text)).to.be.a('number');
+      });
 
     // ---- Capture initial balance ----
     cy.get('.center strong:nth-child(2)').invoke('text')
@@ -50,6 +56,9 @@ describe('Bank app - Hermione Granger flow (stable)', () => {
         cy.contains('Deposit').click();
         enterAmount(depositValue);
         cy.get('form button').contains('Deposit').click();
+
+        // ✅ Assert success message
+        cy.contains('Deposit Successful').should('be.visible');
 
         waitForBalance(initialBalance + depositValue);
 
@@ -67,18 +76,33 @@ describe('Bank app - Hermione Granger flow (stable)', () => {
             enterAmount(withdrawValue);
             cy.get('form button').contains('Withdraw').click();
 
-            waitForBalance(balanceAfterDeposit - withdrawValue);
-          });
+            // ✅ Assert success message
+            cy.contains('Transaction successful').should('be.visible');
 
-        // ---- Transactions check ----
-        cy.contains('Transactions').click();
-        cy.get('table tbody tr').should('have.length.at.least', 2);
-        cy.get('table tbody tr').eq(0).should('contain.text', 'Credit');
-        cy.get('table tbody tr').eq(1).should('contain.text', 'Debit');
+            waitForBalance(balanceAfterDeposit - withdrawValue);
+
+            // ---- Transactions check ----
+            cy.contains('Transactions').click();
+
+            // At least 2 transactions
+            cy.get('table tbody tr').should('have.length.at.least', 2);
+
+            // ✅ Assert Credit with exact amount
+            cy.get('table tbody tr').eq(0)
+              .should('contain.text', depositValue)
+              .and('contain.text', 'Credit');
+
+            // ✅ Assert Debit with exact amount
+            cy.get('table tbody tr').eq(1)
+              .should('contain.text', withdrawValue)
+              .and('contain.text', 'Debit');
+          });
 
         // ---- Back & switch account ----
         cy.contains('Back').click();
-        cy.get('#accountSelect').should('be.visible').select(2);
+
+        // Select another account by label/value instead of index
+        cy.get('#accountSelect').should('be.visible').select('1002');
         cy.contains('Transactions').click();
         cy.get('table tbody tr').should('have.length', 0);
 
